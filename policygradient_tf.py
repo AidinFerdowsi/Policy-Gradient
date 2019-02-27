@@ -22,10 +22,10 @@ class HiddenLayer:
         
     def forward(self,X):
         if self.use_bias:
-            a = tf.matmul(X,self,W) + self.b
+            a = tf.matmul(X,self.W) + self.b
             
         else:
-            a = tf.matmul(X,self,W)
+            a = tf.matmul(X,self.W)
         
         return self.f(a)
     
