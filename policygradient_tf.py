@@ -59,7 +59,47 @@ class PolicyModel:
         for layer in self.layers:
             Z = layer.forward(Z)
             
-        self.predict_op = Z
+        
+        pa_given_s = Z
+        self.predict_op = pa_given_s
                 
         
+        selected_probs = tf.log(
+                tf.reduce_sum(pa_given_s * 
+                tf.one_hot(self.actions, K ), reduction_indices=[1]))
+        
+        cost = -tf.reduce_sum(self.advantages*selected_probs)
+        
+        
+        self.train_op = tf.train.AdagradOptimizer(10e-2).minimize(cost)
+        
+        
+    def set_session(self,session):
+        self.session = session
+        
+    
+    
+    def partial_fit(self,X,actions,advantages):
+        X = np.atleast_2d(X)
+        actions = np.atleast_1d(actions)
+        advantages = np.atleast_1d(advantages)
+        self.session.run(
+                self.train_op,
+                feed_dict = {
+                        self.X : X,
+                        self.actions : actions,
+                        self.advantages : advantages,
+                        }
+                )
+        
+    def predict(self,X):
+        X = np.atleast_2d(X)
+        return self.session.run(self.predict_op, feed_dict={self.X : X})
+    
+    
+    def sample_action(self,X):
+        p = self.predict(X)[0]
+        return np.random.choice(len(p), p = p )
+
+
         
