@@ -60,46 +60,63 @@ class PolicyModel:
             Z = layer.forward(Z)
             
         
-        pa_given_s = Z
-        self.predict_op = pa_given_s
-                
+            pa_given_s = Z
+            self.predict_op = pa_given_s
+                    
+            
+            selected_probs = tf.log(
+                    tf.reduce_sum(pa_given_s * 
+                    tf.one_hot(self.actions, K ), reduction_indices=[1]))
+            
+            cost = -tf.reduce_sum(self.advantages*selected_probs)
+            
+            
+            self.train_op = tf.train.AdagradOptimizer(10e-2).minimize(cost)
+            
+            
+        def set_session(self,session):
+            self.session = session
+            
         
-        selected_probs = tf.log(
-                tf.reduce_sum(pa_given_s * 
-                tf.one_hot(self.actions, K ), reduction_indices=[1]))
         
-        cost = -tf.reduce_sum(self.advantages*selected_probs)
+        def partial_fit(self,X,actions,advantages):
+            X = np.atleast_2d(X)
+            actions = np.atleast_1d(actions)
+            advantages = np.atleast_1d(advantages)
+            self.session.run(
+                    self.train_op,
+                    feed_dict = {
+                            self.X : X,
+                            self.actions : actions,
+                            self.advantages : advantages,
+                            }
+                    )
+            
+        def predict(self,X):
+            X = np.atleast_2d(X)
+            return self.session.run(self.predict_op, feed_dict={self.X : X})
         
         
-        self.train_op = tf.train.AdagradOptimizer(10e-2).minimize(cost)
-        
-        
-    def set_session(self,session):
-        self.session = session
-        
-    
-    
-    def partial_fit(self,X,actions,advantages):
-        X = np.atleast_2d(X)
-        actions = np.atleast_1d(actions)
-        advantages = np.atleast_1d(advantages)
-        self.session.run(
-                self.train_op,
-                feed_dict = {
-                        self.X : X,
-                        self.actions : actions,
-                        self.advantages : advantages,
-                        }
-                )
-        
-    def predict(self,X):
-        X = np.atleast_2d(X)
-        return self.session.run(self.predict_op, feed_dict={self.X : X})
-    
-    
-    def sample_action(self,X):
-        p = self.predict(X)[0]
-        return np.random.choice(len(p), p = p )
+        def sample_action(self,X):
+            p = self.predict(X)[0]
+            return np.random.choice(len(p), p = p )
 
 
+class ValueModel:
+    def __init__(self, D, K, hidden_layer_sizes):
         
+        self.layers = []
+        M1 = D
+        for M2 in hidden_layer_sizes:
+            layer = HiddenLayer(M1,M2)
+            self.layers.append(layer)
+            M1 = M2
+            
+            
+        
+        
+        layer = HiddenLayer(M1,K, tf.nn.softmax,use_bias= False)
+        self.layers.append(layer)
+        
+        
+        self.X = tf.placeholder(tf.float32,shape = (None , D), name = 'X')
