@@ -9,7 +9,7 @@ import gym
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
-
+from FeatureTransformer import FeatureTransformer
 
 class HiddenLayer:
     def __init__(self,M1,M2, f = tf.nn.tanh , use_bias = True, zeros = False ):
@@ -33,11 +33,13 @@ class HiddenLayer:
         
         return self.f(a)
     
+
+    
     
 class PolicyModel:
     
     def __init__(self, D, ft, hidden_layer_sizes = []):
-        
+        self.ft = ft
         self.layers = []
         M1 = D
         for M2 in hidden_layer_sizes:
@@ -53,7 +55,7 @@ class PolicyModel:
         
         
         self.X = tf.placeholder(tf.float32,shape = (None , D), name = 'X')
-        self.actions = tf.placeholder(tf.int32,shape = (None ,), name = 'actions')
+        self.actions = tf.placeholder(tf.float32,shape = (None ,), name = 'actions')
         self.advantages = tf.placeholder(tf.float32,shape = (None ,), name = 'advantages')
         
         
@@ -160,8 +162,83 @@ class ValueModel:
             Y = np.atleast_1d(Y)
             self.session.run(self.train_op,feed_dict = {self.X : X, self.Y : Y})
             cost = self.session.run(self.cost,feed_dict = {self.X : X, self.Y : Y})
+            self.costs.append(cost)
             
             
     def predict(self,X):
             X = np.atleast_2d(X)
+            X = self.ft.transform(X)
             return self.session.run(self.predict_op, feed_dict={self.X : X})
+        
+def play_one_episode(env,pmodel,vmodel,gamma):
+    observation = env.reset()
+    done = False
+    totalreward = 0
+    iters = 0
+        
+    while not done and iters <2000:
+        action = pmodel.sample_action(observation)
+        prev_observation = observation
+        observation, reward, done, info = env.step([action])
+        
+        
+        totalreward +=reward
+        V_next = vmodel.predict(observation)
+        G = reward + gamma*V_next
+        advantage = G -vmodel.predict(prev_observation)
+        pmodel.partial_fit(prev_observation,action,advantage)
+        vmodel.partial_fit(prev_observation, G)
+        iters +=1
+    
+    
+    return totalreward, iters
+    
+    
+def plotAvgReward(totalRewards):
+    N = len(totalRewards)
+    running_avg = np.empty(N)
+    for t in range(N):
+        running_avg[t] = totalRewards[max(0, t-100):(t+1)].mean()
+    plt.plot(running_avg)
+    plt.title("Running Average")
+    plt.show()
+    
+    
+    
+def main():
+    env = gym.make('MountainCarContinuous-v0')
+    ft = FeatureTransformer(env,n_components = 100)
+    D = ft.dimensions
+    
+    pmodel = PolicyModel(D,ft,[])
+    vmodel = ValueModel(D,ft,[])
+    init = tf.global_variables_initializer()
+    
+    session = tf.InteractiveSession()
+    session.run(init)
+    pmodel.set_session(session)
+    vmodel.set_session(session)
+    gamma = 0.95
+    
+    N = 50
+    
+    
+    totalrewards = np.empty(N)
+    
+    for n in range(N):
+        totalrewards[n], num_steps = play_one_episode(env, pmodel,vmodel, gamma)
+#        if (n + 1) % 100 == 0:
+        print("episode:", n+1, "total reward: %.1f" % totalrewards[n],"num steps: %d" %num_steps)
+    
+    print("avg reward for last 100 episodes:", totalrewards[-100:].mean())
+    print("total steps:", -totalrewards.sum())
+        
+    plt.plot(totalrewards)
+    plt.title("Rewards")
+    plt.show()
+
+    plotAvgReward(totalrewards)
+    
+    
+if __name__ == '__main__':
+    main()
