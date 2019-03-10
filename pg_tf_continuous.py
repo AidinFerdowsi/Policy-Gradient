@@ -220,7 +220,7 @@ def main():
     vmodel.set_session(session)
     gamma = 0.95
     
-    N = 50
+    N = 500
     
     
     totalrewards = np.empty(N)
